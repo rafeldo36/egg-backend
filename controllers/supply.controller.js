@@ -1,7 +1,6 @@
 const Supply = require("../models/supply.model");
 const Customer = require("../models/customer.model");
-const Stock = require("../models/stock.model");
-const { deductStock } = require("./stock.controller");
+const { deductStock, reverseSupply } = require("./stock.controller");
 
 
 exports.addSupply = async (req, res) => {
@@ -25,7 +24,7 @@ exports.addSupply = async (req, res) => {
 
     // ✅ Create supply record
     const supply = await Supply.create({
-      customer: customerId,
+      customerId,
       trays,
       ratePerTray,
       purchaseRatePerTray,
@@ -38,19 +37,50 @@ exports.addSupply = async (req, res) => {
     await customer.save();
     await deductStock(trays);
 
-
-    // ✅ UPDATE STOCK HERE
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-
-    await Stock.findOneAndUpdate(
-      { date: startOfDay },
-      { $inc: { suppliedStock: trays } },
-      { upsert: true, returnDocument: 'after' }
-    );
-
     res.json(supply);
 
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getSupplies = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const filter = {};
+
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to) filter.date.$lte = new Date(to);
+    }
+
+    const supplies = await Supply.find(filter).sort({ date: -1 });
+    res.json(supplies);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.deleteSupply = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const supply = await Supply.findById(id);
+
+    if (!supply) {
+      return res.status(404).json({ message: "Supply not found" });
+    }
+
+    const customer = await Customer.findById(supply.customerId);
+    if (customer) {
+      customer.currentBalance = customer.currentBalance - supply.totalAmount;
+      await customer.save();
+    }
+
+    await reverseSupply(supply.trays);
+    await supply.deleteOne();
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

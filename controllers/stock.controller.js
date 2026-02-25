@@ -42,6 +42,16 @@ exports.deductStock = async (quantity) => {
   await stock.save();
 };
 
+// ✅ Reverse Supply (used when deleting a supply)
+exports.reverseSupply = async (quantity) => {
+  const date = todayDate();
+  const stock = await Stock.findOne({ date });
+  if (!stock) return;
+
+  stock.supplied = Math.max(0, stock.supplied - quantity);
+  await stock.save();
+};
+
 // ✅ Get Today Stock
 exports.getTodayStock = async (req, res) => {
   try {
