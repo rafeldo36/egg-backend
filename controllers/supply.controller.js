@@ -1,6 +1,8 @@
 const Supply = require("../models/supply.model");
 const Customer = require("../models/customer.model");
 const { deductStock, reverseSupply } = require("./stock.controller");
+const messaging = require("../services/messaging.service");
+
 
 
 exports.addSupply = async (req, res) => {
@@ -36,6 +38,19 @@ exports.addSupply = async (req, res) => {
     customer.currentBalance = newBalance;
     await customer.save();
     await deductStock(trays);
+
+    // ✅ Send notification to customer
+    if (customer.phone) {
+      messaging.sendSupplyNotification(
+        customer,
+        trays,
+        totalAmount,
+        newBalance
+      ).catch(err => {
+        console.error("⚠️  Failed to send supply notification:", err.message);
+        // Don't fail the supply creation if notification fails
+      });
+    }
 
     res.json(supply);
 

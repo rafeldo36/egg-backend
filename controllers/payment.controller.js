@@ -1,5 +1,7 @@
 const Payment = require("../models/payment.model");
 const Customer = require("../models/customer.model");
+const messaging = require("../services/messaging.service");
+
 
 exports.addPayment = async (req, res) => {
   const { customerId, amount } = req.body;
@@ -7,9 +9,23 @@ exports.addPayment = async (req, res) => {
   const payment = await Payment.create(req.body);
 
   // Reduce balance
-  await Customer.findByIdAndUpdate(customerId, {
-    $inc: { currentBalance: -amount }
-  });
+  const updatedCustomer = await Customer.findByIdAndUpdate(
+    customerId,
+    { $inc: { currentBalance: -amount } },
+    { new: true }
+  );
+
+  // ✅ Send payment notification to customer
+  if (updatedCustomer && updatedCustomer.phone) {
+    messaging.sendPaymentNotification(
+      updatedCustomer,
+      amount,
+      updatedCustomer.currentBalance
+    ).catch(err => {
+      console.error("⚠️  Failed to send payment notification:", err.message);
+      // Don't fail the payment if notification fails
+    });
+  }
 
   res.json(payment);
 };
